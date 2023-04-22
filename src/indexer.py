@@ -7,6 +7,8 @@ import nltk
 import psutil
 import time
 
+nltk.download('punkt')
+
 from file_writer import get_jsons, write_partial_index 
 
 MEGABYTE = 1024 * 1024
@@ -17,7 +19,7 @@ def get_memory_limit_value():
 def memory_limit(value):
     limit = get_memory_limit_value()
     print(resource.RLIMIT_AS, limit)
-    # resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+    resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
 
 def indexer(doc_id, words, inverted_list, list_number, is_last_doc):
     for word in words:
@@ -39,6 +41,9 @@ def indexer(doc_id, words, inverted_list, list_number, is_last_doc):
         inverted_list.clear()
     elif is_last_doc:
         write_partial_index(inverted_list, list_number)
+        
+        list_number += 1
+        inverted_list.clear()
 
 def tokenize(words):
     return nltk.word_tokenize(words)
@@ -54,11 +59,12 @@ def main():
 
     df = get_jsons()
 
-    df = df.sort_values(by='id', ascending=True)
+    # df = df.sort_values(by='id', ascending=True)
 
     print("finished", df)
     
     for index, doc in df.iterrows():
+        print("Index: " + str(index) + " " + str(len(df)))
         doc_id = int(doc['id'])
         text = doc['text']
         
