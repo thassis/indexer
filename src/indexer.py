@@ -7,6 +7,8 @@ import nltk
 import psutil
 import time
 
+from file_writer import get_jsons, write_partial_index 
+
 MEGABYTE = 1024 * 1024
 
 def get_memory_limit_value():
@@ -17,40 +19,26 @@ def memory_limit(value):
     print(resource.RLIMIT_AS, limit)
     # resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
 
-def indexer(doc_id, words, inverted_list, doc_index, term_lexicon):
+def indexer(doc_id, words, inverted_list, list_number, is_last_doc):
     for word in words:
         if word not in inverted_list:
             inverted_list[word] = []
         inverted_list[word].append(doc_id)
     
-    doc_index[doc_id] = len(words)
-    
-    for word in set(words):
-        if word not in term_lexicon:
-            term_lexicon[word] = 0
-        term_lexicon[word] += 1
-
-    print(get_memory_limit_value(), sys.getsizeof(inverted_list) + sys.getsizeof(doc_index) + sys.getsizeof(term_lexicon))
+    #memory logs
+    print(get_memory_limit_value(), sys.getsizeof(inverted_list))
     process = psutil.Process()
     memory_usage = process.memory_info().rss
-
     print(f"Memory usage: {memory_usage / (1024 ** 2):.2f} MB")
+    #end of memory logs
 
-    with open(os.path.join(GENERATED_DIR, "doc_index.txt"), "w") as f:
-        for doc_id in doc_index.keys():
-            f.write(f"{doc_id}: {doc_index[doc_id]}\n")
-    
-    with open(os.path.join(GENERATED_DIR, "term_lexicon.txt"), "w") as f:
-        for word in term_lexicon.keys():
-            f.write(f"{word}: {term_lexicon[word]}\n")
-
-    if sys.getsizeof(inverted_list) + sys.getsizeof(doc_index) + sys.getsizeof(term_lexicon) > get_memory_limit_value():
-        write_index(inverted_list, doc_index, term_lexicon)
+    if sys.getsizeof(inverted_list) > get_memory_limit_value():
+        write_partial_index(inverted_list, list_number)
         
-        # Clear the temporary index
+        list_number += 1
         inverted_list.clear()
-        # doc_index.clear()
-        # term_lexicon.clear()
+    elif is_last_doc:
+        write_partial_index(inverted_list, list_number)
 
 def tokenize(words):
     return nltk.word_tokenize(words)
@@ -64,7 +52,6 @@ def main():
 
     start = time.time()
 
-
     df = get_jsons()
 
     df = df.sort_values(by='id', ascending=True)
@@ -77,15 +64,12 @@ def main():
         
         words = tokenize(text)
 
-        indexer(doc_id, words, inverted_list, doc_index, term_lexicon)
+        indexer(doc_id, words, inverted_list, 0, index == len(df) - 1)
     
-    write_index(inverted_list, doc_index, term_lexicon)
+    # merge_indexes(inverted_list, doc_index, term_lexicon)
 
     end = time.time()
     print(end - start)
-
-def get_jsons():
-    return pandas.read_json(CORPUS_DIR, lines=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
@@ -104,8 +88,3 @@ if __name__ == "__main__":
     except MemoryError:
         sys.stderr.write('\n\nERROR: Memory Exception\n')
         sys.exit(1)
-
-
-# You CAN (and MUST) FREELY EDIT this file (add libraries, arguments, functions and calls) to implement your indexer
-# However, you should respect the memory limitation mechanism and guarantee
-# it works correctly with your implementation

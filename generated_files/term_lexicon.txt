@@ -3,5 +3,5 @@ this: 2
 basic: 1
 is: 2
 text: 1
-intermediated: 1
+intermediate: 1
 another: 1
