@@ -1,4 +1,5 @@
 import os
+import json
 import pandas
 
 CORPUS_DIR = '../files/simple_corpus.jsonl'
@@ -11,6 +12,6 @@ def get_jsons():
     return pandas.read_json(CORPUS_DIR, lines=True)
 
 def write_partial_index(inverted_list, list_number):
-    with open(GENERATED_DIR + PARTIAL_FILE_NAME + "_" + str(list_number) + ".txt", "w") as f:
-        for word in inverted_list.keys():
-            f.write(f"{word}: {inverted_list[word]}\n")
+    filename = f'inverted_list_{list_number}.json'
+    with open(filename, 'w') as f:
+        json.dump(inverted_list, f)
