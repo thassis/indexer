@@ -6,7 +6,9 @@ import glob
 import heapq
 import tempfile
 
-CORPUS_DIR = f'/home/thassis/projects/corpus.jsonl'
+CORPUS_DIR = f'files/simple_corpus.jsonl'
+
+GENERATED_DIR = "generated_files"
 
 CORPUS_SIZE = (os.path.getsize(CORPUS_DIR)) #MB aproximados
 
@@ -49,6 +51,12 @@ def write_partial_index(inverted_list, list_number):
 
     f.close()
 
+def create_term_lexicon(list):
+    with open(GENERATED_DIR + "/term_lexicon.txt", "a+") as f:
+        for key, value in list.items():
+            f.write("{}: {}\n".format(key, str(len(value))))
+    f.close()
+
 def merge_dicts(d1, d2):
     result = d1.copy()
     for key, value in d2.items():
@@ -74,11 +82,10 @@ def read_jsons(file_list, chunk_size):
         f.close()
 
 def merge_inverted_lists(memory_limit):    
-    generated_path = "generated_files"
-    output_file = 'output/output.json'
+    output_file = GENERATED_DIR + '/index.json'
     
-    filenames = os.listdir(generated_path)
-    filenames = [generated_path + '/' + name for name in filenames if 'inverted_list' in name]
+    filenames = os.listdir(GENERATED_DIR)
+    filenames = [GENERATED_DIR + '/' + name for name in filenames if 'inverted_list' in name]
     
     number_of_files = len(filenames)
     chunk_size = math.floor((memory_limit / 2) / number_of_files)
@@ -86,12 +93,25 @@ def merge_inverted_lists(memory_limit):
     with open(output_file, 'w') as f:
         f.write('{')
         for chunks in read_jsons(filenames, chunk_size):
+            print(chunks)
             merged_data = {}
             for chunk in chunks:
                 merged_data = merge_dicts(merged_data, chunk)
-            f.write(json.dumps(sort_list(merged_data))[1:-1])
+            sorted_data = sort_list(merged_data)
+            f.write(json.dumps(sorted_data)[1:-1])
+            create_term_lexicon(sorted_data)
         f.write('}')
 
 
-    # for filename in glob.glob(os.path.join(generated_path, 'inverted_list*')):
-    #     os.remove(filename)
+    for filename in glob.glob(os.path.join(GENERATED_DIR, 'inverted_list*')):
+        os.remove(filename)
+
+def create_document_index(doc_id, words):
+    with open(GENERATED_DIR + "/document_index.txt", "a+") as f:
+        f.write("{}: {}\n".format(doc_id, str(len(words))))
+    f.close()
+
+def clean_file(name):
+    with open(GENERATED_DIR + name, "w") as f:
+        pass
+    f.close()

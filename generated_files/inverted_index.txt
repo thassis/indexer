@@ -1,7 +1,0 @@
-this: [1, 2]
-is: [1, 2]
-a: [1]
-basic: [1]
-text: [1]
-another: [2]
-intermediate: [2]

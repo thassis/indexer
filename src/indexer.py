@@ -13,7 +13,7 @@ from nltk.corpus import stopwords
 nltk.download('stopwords')
 nltk.download('punkt')
 
-from file_writer import get_corpus_jsons, write_partial_index, merge_inverted_lists
+from file_writer import get_corpus_jsons, write_partial_index, merge_inverted_lists, create_document_index, clean_file
 
 MEGABYTE = 1024 * 1024
 
@@ -22,7 +22,7 @@ list_number = 0
 def get_memory_limit_value():
     return args.memory_limit * MEGABYTE
 
-def memory_limit(value):
+def memory_limit():
     limit = get_memory_limit_value()
     print(resource.RLIMIT_AS, limit)
     resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
@@ -68,6 +68,8 @@ def main():
     inverted_list = {}
 
     print("start")
+    clean_file("/document_index.txt")
+    clean_file("/term_lexicon.txt")
 
     start = time.time()
     # df = df.sort_values(by='id', ascending=True)
@@ -87,6 +89,7 @@ def main():
             words = tokenize(text)
 
             indexer(doc_id, words, inverted_list, index == len(df) - 1)
+            create_document_index(doc_id, words)
         print("list: " + str(sys.getsizeof(inverted_list)), "words: " + str(sys.getsizeof(words)), "usage: " + str(memory_usage))
 
     merge_inverted_lists(get_memory_limit_value())
@@ -105,7 +108,7 @@ if __name__ == "__main__":
         help='memory available'
     )
     args = parser.parse_args()
-    memory_limit(args.memory_limit)
+    memory_limit()
     try:
         main()
     except MemoryError:

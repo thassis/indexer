@@ -1,4 +1,5 @@
 /pa1/*
 /files/original_corpus.jsonl
+/files/corpus.jsonl
 /src/__pycache__/*
 /generated_files/*
