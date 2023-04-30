@@ -4,9 +4,9 @@ import json
 import pandas
 import glob
 import heapq
-import tempfile
+import psutil
 
-CORPUS_DIR = f'files/simple_corpus.jsonl'
+CORPUS_DIR = f'files/output_file_aa.jsonl'
 
 GENERATED_DIR = "generated_files"
 
@@ -37,17 +37,16 @@ def sort_list(list):
     return sorted_list
 
 def write_partial_index(inverted_list, list_number):
-    filename = f'generated_files/inverted_list_{list_number}.json'
+    print("list number:::", list_number)
+    filename = f'generated_files/inverted_list_{list_number}.txt'
 
     sorted_list = sort_list(inverted_list)
 
     with open(filename, 'w') as f:
-        f.write('{')
         for i, (key, value) in enumerate(sorted_list.items()):
-            f.write(f'"{key}": {value}')
-            if i < len(sorted_list) - 1:
-                f.write(',')
-        f.write('}')
+            if key == "" or key == '' or len(key) == 0 or not key:
+                pass
+            f.write(f'{key}: {value}\n')
 
     f.close()
 
@@ -69,42 +68,67 @@ def merge_dicts(d1, d2):
 def read_jsons(file_list, chunk_size):
     files = [open(file_name, 'r') for file_name in file_list]
     while True:
-        chunks = [f.read(chunk_size) for f in files]
+        pid = os.getpid()
+        process = psutil.Process(pid)
+        memory_usage = process.memory_info().rss
+        mem = psutil.virtual_memory()
+        available_mem = mem.available / (1024 * 1024) # convert to MB
+        print(f"Available memory: {available_mem:.2f} MB")
+        print(memory_usage)
+        print("opened all files", chunk_size)
+        chunks = [f.read(math.floor(chunk_size/10)) for f in files]
+        print("we still have the chunk")
         if not any(chunks):
             break
         data = []
         for chunk in chunks:
-            print(chunk)
             if(chunk):
-                data.append(json.loads(chunk))
+                output_dict = {}
+                for line in chunk.splitlines():
+                    try:
+                        key, value_str = line.split(':', 1)
+                        value = json.loads(value_str.strip())
+                        output_dict[key.strip()] = value
+                    except (ValueError, json.JSONDecodeError):
+                        # Linha inválida ou incompleta, ignorar
+                        pass
+                data.append(output_dict)
         yield data
     for f in files:
         f.close()
 
-def merge_inverted_lists(memory_limit):    
+def merge_inverted_lists(memory_limit):   
+    print("---------------STARTED MERGING---------------") 
     output_file = GENERATED_DIR + '/index.json'
     
     filenames = os.listdir(GENERATED_DIR)
     filenames = [GENERATED_DIR + '/' + name for name in filenames if 'inverted_list' in name]
     
     number_of_files = len(filenames)
-    chunk_size = math.floor((memory_limit / 2) / number_of_files)
+    chunk_size = math.floor((memory_limit / 10) / number_of_files)
     
+    print("unitil here is ok", chunk_size, filenames)
     with open(output_file, 'w') as f:
         f.write('{')
         for chunks in read_jsons(filenames, chunk_size):
-            print(chunks)
+            print("here is still ok")
             merged_data = {}
             for chunk in chunks:
                 merged_data = merge_dicts(merged_data, chunk)
             sorted_data = sort_list(merged_data)
             f.write(json.dumps(sorted_data)[1:-1])
             create_term_lexicon(sorted_data)
+
+            pid = os.getpid()
+            process = psutil.Process(pid)
+            memory_usage = process.memory_info().rss
+            print(memory_usage)
+    
         f.write('}')
 
 
-    for filename in glob.glob(os.path.join(GENERATED_DIR, 'inverted_list*')):
-        os.remove(filename)
+    # for filename in glob.glob(os.path.join(GENERATED_DIR, 'inverted_list*')):
+    #     os.remove(filename)
 
 def create_document_index(doc_id, words):
     with open(GENERATED_DIR + "/document_index.txt", "a+") as f:
