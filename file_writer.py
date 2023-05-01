@@ -6,32 +6,27 @@ import glob
 import heapq
 import psutil
 
-# CORPUS_DIR = f'/home/thassis/projects/corpus.jsonl'
-CORPUS_DIR = f'files/output_file_aa.jsonl'
+MEGABYTE = 1024 * 1024
 
-GENERATED_DIR = "generated_files"
+def get_corpus_jsons(memory_limit, num_threads, corpus_path):
+    corpus_size = (os.path.getsize(corpus_path))  # MB aproximados
 
-CORPUS_SIZE = (os.path.getsize(CORPUS_DIR))  # MB aproximados
+    num_lines = 0
 
-num_lines = 0
-
-with open(CORPUS_DIR, 'r') as file:
-    for line in file:
-        num_lines += 1
-file.close()
-
-
-def get_corpus_jsons(memory_limit, num_threads):
+    with open(corpus_path, 'r') as file:
+        for line in file:
+            num_lines += 1
+    file.close()
+    
     print(num_lines)
-    line_size = (CORPUS_SIZE / num_lines) * 20
+    line_size = (corpus_size / num_lines) * 20
     # salva 40% da memória para leitura
     chunksize = int(math.floor(((memory_limit*0.4) / line_size))/num_threads)
     print(line_size, chunksize)
 
     if chunksize < 1:
         chunksize = 1
-    return pandas.read_json(CORPUS_DIR, lines=True, chunksize=chunksize)
-
+    return pandas.read_json(corpus_path, lines=True, chunksize=chunksize)
 
 def sort_list(list):
     sorted_list = {}
@@ -41,9 +36,9 @@ def sort_list(list):
     return sorted_list
 
 
-def write_partial_index(inverted_list, list_number):
+def write_partial_index(inverted_list, list_number, index_path):
     print("list number:::", list_number)
-    filename = f'generated_files/inverted_list_{list_number}.txt'
+    filename = f'{index_path}/inverted_list_{list_number}.txt'
 
     sorted_list = sort_list(inverted_list)
 
@@ -56,8 +51,8 @@ def write_partial_index(inverted_list, list_number):
     f.close()
 
 
-def create_term_lexicon(list, last_position):
-    with open(GENERATED_DIR + "/term_lexicon.txt", "a+") as f:
+def create_term_lexicon(list, last_position, index_path):
+    with open(index_path + "/term_lexicon.txt", "a+") as f:
         for index, (key, value) in enumerate(list.items()):
             f.write("{}: {}, {}\n".format(
                 key, index + last_position, str(len(value))))
@@ -104,12 +99,12 @@ def read_jsons(file_list, chunk_size):
         f.close()
 
 
-def merge_inverted_lists(memory_limit):
+def merge_inverted_lists(memory_limit, index_path):
     print("---------------STARTED MERGING---------------")
-    output_file = GENERATED_DIR + '/index.txt'
+    output_file = index_path + '/index.txt'
 
-    filenames = os.listdir(GENERATED_DIR)
-    filenames = [GENERATED_DIR + '/' +
+    filenames = os.listdir(index_path)
+    filenames = [index_path + '/' +
                  name for name in filenames if 'inverted_list' in name]
 
     number_of_files = len(filenames)
@@ -129,24 +124,52 @@ def merge_inverted_lists(memory_limit):
             pid = os.getpid()
             process = psutil.Process(pid)
 
-            with open("log.txt", "a+") as flog:
+            with open(index_path + "/log.txt", "a+") as flog:
                 flog.write("\nTerminou merge: " + str(last_position) +
                            "|" + str(process.memory_info().rss))
             flog.close()
-            create_term_lexicon(sorted_data, last_position)
+            create_term_lexicon(sorted_data, last_position, index_path)
             last_position += len(sorted_data)
 
-    # for filename in glob.glob(os.path.join(GENERATED_DIR, 'inverted_list*')):
-    #     os.remove(filename)
-
-
-def create_document_index(doc_id, words):
-    with open(GENERATED_DIR + "/document_index.txt", "a+") as f:
+def create_document_index(doc_id, words, index_path):
+    with open(index_path + "/document_index.txt", "a+") as f:
         f.write("{}: {}\n".format(doc_id, str(len(words))))
     f.close()
 
 
-def clean_file(name):
-    with open(GENERATED_DIR + name, "w") as f:
-        pass
-    f.close()
+def clean_files(index_path):
+    for filename in os.listdir(index_path):
+        file_path = os.path.join(index_path, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+        except Exception as e:
+            print('Failed to delete %s. Reason: %s' % (file_path, e))
+
+
+def write_output(elapsed_time, index_path):
+    index_size = os.path.getsize(index_path + "/index.txt")
+
+    filenames = os.listdir(index_path)
+    filenames = [index_path + '/' +
+                 name for name in filenames if 'inverted_list' in name]
+
+    number_of_lists = len(filenames)
+
+    total_size = sum(os.path.getsize(filename) for filename in filenames)
+
+    average_size = (total_size / number_of_lists) / MEGABYTE
+
+    data = {
+        "Index Size": index_size / MEGABYTE,
+        "Elapsed Time": elapsed_time,
+        "Number of lists": number_of_lists,
+        "Average List Size": average_size
+    }
+
+    with open("output.json", "w") as f_out:
+        json.dump(data, f_out)
+
+    f_out.close()
+
+    print(data)
