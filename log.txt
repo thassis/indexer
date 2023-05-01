@@ -1,3 +1,6 @@
 Termoniou os indexes: 261656576
 Terminou merge: 0|363356160
-The end::159.77452683448792
+The end::159.77452683448792Termoniou os indexes: 264998912
+Terminou merge: 0|311406592
+Terminou merge: 94713|330711040
+The end::150.92063426971436

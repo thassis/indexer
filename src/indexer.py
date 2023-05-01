@@ -3,7 +3,7 @@ import os
 import sys
 import resource
 import argparse
-import pandas
+import threading
 import psutil
 import time
 
@@ -56,15 +56,18 @@ def indexer(doc_id, words, inverted_list, is_last_doc):
     pid = os.getpid()
     process = psutil.Process(pid)
     memory_usage = process.memory_info().rss
-    # print(memory_usage, get_memory_limit_value(), psutil.virtual_memory().total)
+    # print("INDEXER: usage:", memory_usage / MEGABYTE,
+    #       "MB", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
     # end of memory logs
     # se tiver passando de 40% da memória, precisa liberar para continuar a leitura
-    if memory_usage > get_memory_limit_value() * 0.4:
+    if memory_usage > get_memory_limit_value() * 0.8:
+        print("memoria vai estourar")
         write_partial_index(inverted_list, list_number)
 
         list_number += 1
         inverted_list.clear()
     elif is_last_doc:
+        print("ultimo doc")
         write_partial_index(inverted_list, list_number)
 
         list_number += 1
@@ -85,38 +88,57 @@ def tokenize(text):
     return words
 
 
+def process_corpus_chunk(chunk, indexer, inverted_list):
+    for index, doc in chunk.iterrows():
+        doc_id = int(doc['id'])
+        text = doc['text']
+        words = tokenize(text)
+
+        indexer(doc_id, words, inverted_list, index == len(chunk) - 1)
+        create_document_index(doc_id, words)
+
+
+def process_corpus(num_threads):
+    inverted_lists = []
+    threads = []
+    it = 0
+    for chunk in get_corpus_jsons(get_memory_limit_value(), num_threads):
+        inverted_lists.append({})
+        print("Index: " + str(it) + " " + str(len(chunk)))
+        thread = threading.Thread(
+            target=process_corpus_chunk, args=(chunk, indexer, inverted_lists[it]))
+        print("after procressing")
+        threads.append(thread)
+        thread.start()
+        print("after start")
+        it += 1
+
+        # limita o número de threads em execução
+        while len(threads) >= num_threads:
+            threads = [t for t in threads if t.is_alive()]
+
+    # espera as threads restantes terminarem a execução
+    for thread in threads:
+        thread.join()
+
+
 def main():
-    inverted_list = {}
     print("start")
     clean_file("/document_index.txt")
     clean_file("/term_lexicon.txt")
 
     start = time.time()
 
-    it = 0
-    for df in get_corpus_jsons(get_memory_limit_value()):
-        print("Index: " + str(it) + " " + str(len(df)))
-        pid = os.getpid()
-        process = psutil.Process(pid)
-        memory_usage = process.memory_info().rss
-        # print(memory_usage, get_memory_limit_value(), psutil.virtual_memory().total)
-        it += 1
-        for index, doc in df.iterrows():
-            doc_id = int(doc['id'])
-            text = doc['text']
+    NUM_THREADS = 4
 
-            words = tokenize(text)
-
-            indexer(doc_id, words, inverted_list, index == len(df) - 1)
-            create_document_index(doc_id, words)
-        print("list: " + str(sys.getsizeof(inverted_list)), "words: " +
-              str(sys.getsizeof(words)), "usage: " + str(memory_usage))
+    process_corpus(NUM_THREADS)
 
     pid = os.getpid()
     process = psutil.Process(pid)
     with open("log.txt", "a+") as flog:
-        flog.write("Termoniou os indexes: " + str(process.memory_info().rss))
-    flog.close()
+        flog.write("Termoniou os indexes: " +
+                   str(process.memory_info().rss))
+        flog.close()
 
     merge_inverted_lists(get_memory_limit_value())
 
