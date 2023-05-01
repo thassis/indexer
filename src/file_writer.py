@@ -6,6 +6,7 @@ import glob
 import heapq
 import psutil
 
+# CORPUS_DIR = f'/home/thassis/projects/corpus.jsonl'
 CORPUS_DIR = f'files/output_file_aa.jsonl'
 
 GENERATED_DIR = "generated_files"
@@ -50,10 +51,11 @@ def write_partial_index(inverted_list, list_number):
 
     f.close()
 
-def create_term_lexicon(list):
+def create_term_lexicon(list, last_position):
     with open(GENERATED_DIR + "/term_lexicon.txt", "a+") as f:
-        for key, value in list.items():
-            f.write("{}: {}\n".format(key, str(len(value))))
+        for index, (key, value) in enumerate(list.items()):
+            print("write term", value)
+            f.write("{}: {}, {}\n".format(key, index + last_position, str(len(value))))
     f.close()
 
 def merge_dicts(d1, d2):
@@ -73,11 +75,8 @@ def read_jsons(file_list, chunk_size):
         memory_usage = process.memory_info().rss
         mem = psutil.virtual_memory()
         available_mem = mem.available / (1024 * 1024) # convert to MB
-        print(f"Available memory: {available_mem:.2f} MB")
-        print(memory_usage)
-        print("opened all files", chunk_size)
+        # print(f"Available memory: {available_mem:.2f} MB chunk: {chunk_size} usage: memory_usage")
         chunks = [f.read(math.floor(chunk_size/10)) for f in files]
-        print("we still have the chunk")
         if not any(chunks):
             break
         data = []
@@ -99,7 +98,7 @@ def read_jsons(file_list, chunk_size):
 
 def merge_inverted_lists(memory_limit):   
     print("---------------STARTED MERGING---------------") 
-    output_file = GENERATED_DIR + '/index.json'
+    output_file = GENERATED_DIR + '/index.txt'
     
     filenames = os.listdir(GENERATED_DIR)
     filenames = [GENERATED_DIR + '/' + name for name in filenames if 'inverted_list' in name]
@@ -108,23 +107,24 @@ def merge_inverted_lists(memory_limit):
     chunk_size = math.floor((memory_limit / 10) / number_of_files)
     
     print("unitil here is ok", chunk_size, filenames)
+    last_position = 0
     with open(output_file, 'w') as f:
-        f.write('{')
         for chunks in read_jsons(filenames, chunk_size):
-            print("here is still ok")
             merged_data = {}
             for chunk in chunks:
                 merged_data = merge_dicts(merged_data, chunk)
             sorted_data = sort_list(merged_data)
-            f.write(json.dumps(sorted_data)[1:-1])
-            create_term_lexicon(sorted_data)
+            for key, value in sorted_data.items():
+                f.write(key + ": " + str(value) + "\n")
 
             pid = os.getpid()
             process = psutil.Process(pid)
-            memory_usage = process.memory_info().rss
-            print(memory_usage)
-    
-        f.write('}')
+
+            with open("log.txt", "a+") as flog:
+                flog.write("\nTerminou merge: " + str(last_position) + "|" + str(process.memory_info().rss))    
+            flog.close()
+            create_term_lexicon(sorted_data, last_position)
+            last_position += len(sorted_data)
 
 
     # for filename in glob.glob(os.path.join(GENERATED_DIR, 'inverted_list*')):

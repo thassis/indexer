@@ -1,0 +1,3 @@
+Termoniou os indexes: 261656576
+Terminou merge: 0|363356160
+The end::159.77452683448792
