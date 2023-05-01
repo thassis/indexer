@@ -6,6 +6,7 @@ import argparse
 import threading
 import psutil
 import time
+import concurrent.futures
 
 import nltk
 from nltk.stem import PorterStemmer
@@ -88,7 +89,8 @@ def tokenize(text):
     return words
 
 
-def process_corpus_chunk(chunk, indexer, inverted_list):
+def process_corpus_chunk(chunk, inverted_list):
+    print("veio aqui?")
     for index, doc in chunk.iterrows():
         doc_id = int(doc['id'])
         text = doc['text']
@@ -102,24 +104,21 @@ def process_corpus(num_threads):
     inverted_lists = []
     threads = []
     it = 0
-    for chunk in get_corpus_jsons(get_memory_limit_value(), num_threads):
-        inverted_lists.append({})
-        print("Index: " + str(it) + " " + str(len(chunk)))
-        thread = threading.Thread(
-            target=process_corpus_chunk, args=(chunk, indexer, inverted_lists[it]))
-        print("after procressing")
-        threads.append(thread)
-        thread.start()
-        print("after start")
-        it += 1
-
-        # limita o número de threads em execução
-        while len(threads) >= num_threads:
-            threads = [t for t in threads if t.is_alive()]
-
-    # espera as threads restantes terminarem a execução
-    for thread in threads:
-        thread.join()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+        for chunk in get_corpus_jsons(get_memory_limit_value(), num_threads):
+            print("INDEX?:: ", it)
+            inverted_lists.append({})
+            # Executa a função process_chunk em uma thread da pool
+            future_indexes = {executor.submit(process_corpus_chunk,
+                                              chunk, inverted_lists[it])}
+            it += 1
+        for future in concurrent.futures.as_completed(future_indexes):
+            try:
+                data = future.result()
+            except Exception as exc:
+                print('generated an exception: %s' % (exc))
+            else:
+                print('page is %d bytes' % (len(data)))
 
 
 def main():
@@ -131,8 +130,9 @@ def main():
 
     NUM_THREADS = 4
 
+    print("before process")
     process_corpus(NUM_THREADS)
-
+    print("after process")
     pid = os.getpid()
     process = psutil.Process(pid)
     with open("log.txt", "a+") as flog:
@@ -140,7 +140,7 @@ def main():
                    str(process.memory_info().rss))
         flog.close()
 
-    merge_inverted_lists(get_memory_limit_value())
+    # merge_inverted_lists(get_memory_limit_value())
 
     end = time.time()
     with open("log.txt", "a+") as flog:

@@ -3,4 +3,13 @@ Terminou merge: 0|363356160
 The end::159.77452683448792Termoniou os indexes: 264998912
 Terminou merge: 0|311406592
 Terminou merge: 94713|330711040
-The end::150.92063426971436
+The end::150.92063426971436Termoniou os indexes: 136564736
+Terminou merge: 0|156278784
+The end::0.9601166248321533Termoniou os indexes: 135716864Termoniou os indexes: 139911168Termoniou os indexes: 136798208
+The end::0.7508113384246826Termoniou os indexes: 136433664
+The end::0.6991016864776611Termoniou os indexes: 137945088
+The end::0.752424955368042Termoniou os indexes: 138194944
+The end::0.7325179576873779Termoniou os indexes: 140324864
+The end::0.7245328426361084Termoniou os indexes: 140222464
+The end::0.7893767356872559Termoniou os indexes: 139628544
+The end::0.7512414455413818
