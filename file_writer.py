@@ -22,7 +22,8 @@ def get_corpus_jsons(memory_limit, num_threads, corpus_path):
     print(num_lines)
     line_size = (corpus_size / num_lines) * 20
     # salva 40% da memória para leitura
-    chunksize = int(math.floor(((memory_limit*0.5) / line_size))/num_threads)
+    chunksize = int(math.floor(
+        ((memory_limit*0.5) / line_size)/num_threads))
     print(line_size, chunksize)
 
     if chunksize < 1:
