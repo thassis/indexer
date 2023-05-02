@@ -185,4 +185,5 @@ def get_next_inverted_list_number(directory):
         return 0
     last_file = sorted(inverted_list_files)[-1]
     last_number = int(last_file.split('_')[-1])
+    print("last number", last_number)
     return last_number + 1
