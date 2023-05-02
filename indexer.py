@@ -11,11 +11,15 @@ import gc
 import tracemalloc
 
 import nltk
-nltk.download('punkt')
-nltk.download('stopwords')
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+
+if not nltk.corpus.stopwords.words('english'):
+    nltk.download('stopwords')
+    
+if not nltk.sent_tokenize('Hello world.'):
+    nltk.download('punkt')
 
 
 MEGABYTE = 1024 * 1024
@@ -56,21 +60,25 @@ def indexer(doc_id, words, inverted_list, is_last_doc):
         inverted_list[word].append(doc_id)
 
     # memory logs
-    usage = resource.getrusage(resource.RUSAGE_SELF)
+    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
     # get the available memory in bytes
-    available_memory = (usage.ru_maxrss * resource.getpagesize())
-
+    pid = os.getpid()
+    process = psutil.Process(pid)
+    memory_usage = process.memory_info().rss
+    
     # print("INDEXER: usage:", memory_usage / MEGABYTE,
     #       "MB", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
     # end of memory logs
     # se tiver passando de 40% da memória, precisa liberar para continuar a leitura
-    if available_memory < get_memory_limit_value() * 0.2:
-        print("memoria vai estourar", available_memory, get_memory_limit_value() * 0.2)
+    if memory_usage > get_memory_limit_value() * 0.5:
+        print("memoria vai estourar", memory_usage/MEGABYTE, sys.getsizeof(inverted_list) / MEGABYTE, usage / MEGABYTE, get_memory_limit_value() / MEGABYTE)
         write_partial_index(inverted_list, list_number, args.index_path)
 
         list_number += 1
         inverted_list.clear()
         gc.collect()
+        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
+        print("after collection", usage)
     elif is_last_doc:
         print("ultimo doc")
         write_partial_index(inverted_list, list_number, args.index_path)
@@ -110,22 +118,21 @@ def process_corpus(num_threads):
     it = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
         for chunk in get_corpus_jsons(get_memory_limit_value(), num_threads, args.corpus_path):
-            print("INDEX?:: ", it, " --- ", sys.getsizeof(chunk))
+            print("INDEX?:: ", it, " --- ", sys.getsizeof(chunk) / MEGABYTE)
             # Executa a função process_chunk em uma thread da pool
             future_indexes = {executor.submit(process_corpus_chunk,
                                               chunk, inverted_lists)}
             it += 1
-            if(it%2 == 0):
+            if(it%num_threads == 0):
                 for future in concurrent.futures.as_completed(future_indexes):
                     pid = os.getpid()
                     process = psutil.Process(pid)
                     memory_usage = process.memory_info().rss
-                    usage = resource.getrusage(resource.RUSAGE_SELF)
 
                     # get the available memory in bytes
-                    available_memory = (usage.ru_maxrss * resource.getpagesize())/MEGABYTE
+                    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
 
-                    print("INDEXER: usage:", memory_usage / MEGABYTE, "MB", "resource usage:", available_memory, "MB\n", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
+                    print("POOL: usage:", memory_usage / MEGABYTE, "MB", "resource usage:", usage / MEGABYTE, "MB\n", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
                     try:
                         print("deu certo")
                     except Exception as exc:
@@ -140,7 +147,7 @@ def main():
 
     start = time.time()
 
-    NUM_THREADS = 2
+    NUM_THREADS = 8
 
     print("before process")
     process_corpus(NUM_THREADS)
@@ -203,6 +210,8 @@ if __name__ == "__main__":
     try:
         main()
     except MemoryError:
+        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
+        print("ERROR | Usage: ", usage / MEGABYTE)
         # Obter uma lista das estatísticas de alocação de memória atuais
         snapshot = tracemalloc.take_snapshot()
 
