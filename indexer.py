@@ -1,4 +1,4 @@
-from file_writer import get_corpus_jsons, write_partial_index, merge_inverted_lists, create_document_index, clean_files, write_output
+from file_writer import get_corpus_jsons, write_partial_index, merge_inverted_lists, create_document_index, clean_files, write_output, get_next_inverted_list_number
 import os
 import sys
 import resource
@@ -17,14 +17,12 @@ from nltk.corpus import stopwords
 
 if not nltk.corpus.stopwords.words('english'):
     nltk.download('stopwords')
-    
+
 if not nltk.sent_tokenize('Hello world.'):
     nltk.download('punkt')
 
 
 MEGABYTE = 1024 * 1024
-
-list_number = 0
 
 
 def get_memory_limit_value():
@@ -50,8 +48,6 @@ def filter_word(word):
 
 
 def indexer(doc_id, words, inverted_list, is_last_doc):
-    global list_number
-
     for word in words:
         if word == "" or word == '' or len(word) == 0:
             pass
@@ -60,30 +56,32 @@ def indexer(doc_id, words, inverted_list, is_last_doc):
         inverted_list[word].append(doc_id)
 
     # memory logs
-    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
+    usage = resource.getrusage(
+        resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
     # get the available memory in bytes
     pid = os.getpid()
     process = psutil.Process(pid)
     memory_usage = process.memory_info().rss
-    
+
     # print("INDEXER: usage:", memory_usage / MEGABYTE,
     #       "MB", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
     # end of memory logs
     # se tiver passando de 40% da memória, precisa liberar para continuar a leitura
     if memory_usage > get_memory_limit_value() * 0.5:
-        print("memoria vai estourar", memory_usage/MEGABYTE, sys.getsizeof(inverted_list) / MEGABYTE, usage / MEGABYTE, get_memory_limit_value() / MEGABYTE)
+        print("memoria vai estourar", memory_usage/MEGABYTE, sys.getsizeof(inverted_list) /
+              MEGABYTE, usage / MEGABYTE, get_memory_limit_value() / MEGABYTE)
         write_partial_index(inverted_list, list_number, args.index_path)
 
-        list_number += 1
+        list_number = get_next_inverted_list_number(args.index_path)
         inverted_list.clear()
         gc.collect()
-        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
+        usage = resource.getrusage(
+            resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
         print("after collection", usage)
     elif is_last_doc:
         print("ultimo doc")
+        list_number = get_next_inverted_list_number(args.index_path)
         write_partial_index(inverted_list, list_number, args.index_path)
-
-        list_number += 1
         inverted_list.clear()
 
 
@@ -113,30 +111,32 @@ def process_corpus_chunk(chunk, inverted_list):
 
 
 def process_corpus(num_threads):
-    inverted_lists = {}
+    inverted_list = {}
     threads = []
     it = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+    future_indexes = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=num_threads) as executor:
         for chunk in get_corpus_jsons(get_memory_limit_value(), num_threads, args.corpus_path):
             print("INDEX?:: ", it, " --- ", sys.getsizeof(chunk) / MEGABYTE)
-            # Executa a função process_chunk em uma thread da pool
-            future_indexes = {executor.submit(process_corpus_chunk,
-                                              chunk, inverted_lists)}
+            future = executor.submit(
+                process_corpus_chunk, chunk, inverted_list)
+            future_indexes.append(future)
+            pid = os.getpid()
+            process = psutil.Process(pid)
+            memory_usage = process.memory_info().rss
+
+            # get the available memory in bytes
+            usage = resource.getrusage(
+                resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
+
+            print("POOL: usage:", memory_usage / MEGABYTE, "MB", "resource usage:", usage / MEGABYTE,
+                  "MB\n", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
             it += 1
-            if(it%num_threads == 0):
-                for future in concurrent.futures.as_completed(future_indexes):
-                    pid = os.getpid()
-                    process = psutil.Process(pid)
-                    memory_usage = process.memory_info().rss
-
-                    # get the available memory in bytes
-                    usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
-
-                    print("POOL: usage:", memory_usage / MEGABYTE, "MB", "resource usage:", usage / MEGABYTE, "MB\n", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
-                    try:
-                        print("deu certo")
-                    except Exception as exc:
-                        print('generated an exception: %s' % (exc))
+            if (it % 2 == 0):
+                for future in future_indexes:
+                    future.result()
+                    print("terminou de processar a thread")
+                    # Process the result here
 
 
 def main():
@@ -147,7 +147,7 @@ def main():
 
     start = time.time()
 
-    NUM_THREADS = 8
+    NUM_THREADS = 2
 
     print("before process")
     process_corpus(NUM_THREADS)
@@ -210,13 +210,15 @@ if __name__ == "__main__":
     try:
         main()
     except MemoryError:
-        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
+        usage = resource.getrusage(
+            resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
         print("ERROR | Usage: ", usage / MEGABYTE)
         # Obter uma lista das estatísticas de alocação de memória atuais
         snapshot = tracemalloc.take_snapshot()
 
         # Filtrar as estatísticas para incluir apenas as linhas de código que alocam memória para variáveis
-        stats = [stat for stat in snapshot.statistics('traceback') if stat.traceback]
+        stats = [stat for stat in snapshot.statistics(
+            'traceback') if stat.traceback]
 
         # Agrupar as estatísticas por objeto e somar as alocações de memória para cada objeto
         mem_by_obj = {}
@@ -225,9 +227,9 @@ if __name__ == "__main__":
             mem = stat.size / 1024 / 1024  # Converter para KB
             mem_by_obj[tuple(obj)] = mem_by_obj.get(tuple(obj), 0) + mem
 
-
         # Ordenar as variáveis pela quantidade de memória usada
-        sorted_mem_by_obj = sorted(mem_by_obj.items(), key=lambda x: x[1], reverse=True)
+        sorted_mem_by_obj = sorted(
+            mem_by_obj.items(), key=lambda x: x[1], reverse=True)
 
         # Imprimir as variáveis e a quantidade de memória usada
         print("[ Top 10 Variáveis ]")

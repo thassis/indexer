@@ -8,6 +8,7 @@ import psutil
 
 MEGABYTE = 1024 * 1024
 
+
 def get_corpus_jsons(memory_limit, num_threads, corpus_path):
     corpus_size = (os.path.getsize(corpus_path))  # MB aproximados
 
@@ -17,7 +18,7 @@ def get_corpus_jsons(memory_limit, num_threads, corpus_path):
         for line in file:
             num_lines += 1
     file.close()
-    
+
     print(num_lines)
     line_size = (corpus_size / num_lines) * 20
     # salva 40% da memória para leitura
@@ -27,6 +28,7 @@ def get_corpus_jsons(memory_limit, num_threads, corpus_path):
     if chunksize < 1:
         chunksize = 1
     return pandas.read_json(corpus_path, lines=True, chunksize=chunksize)
+
 
 def sort_list(list):
     sorted_list = {}
@@ -131,6 +133,7 @@ def merge_inverted_lists(memory_limit, index_path):
             create_term_lexicon(sorted_data, last_position, index_path)
             last_position += len(sorted_data)
 
+
 def create_document_index(doc_id, words, index_path):
     with open(index_path + "/document_index.txt", "a+") as f:
         f.write("{}: {}\n".format(doc_id, str(len(words))))
@@ -173,3 +176,13 @@ def write_output(elapsed_time, index_path):
     f_out.close()
 
     print(data)
+
+
+def get_next_inverted_list_number(directory):
+    files = os.listdir(directory)
+    inverted_list_files = [f for f in files if f.startswith('inverted_list_')]
+    if not inverted_list_files:
+        return 0
+    last_file = sorted(inverted_list_files)[-1]
+    last_number = int(last_file.split('_')[-1])
+    return last_number + 1
