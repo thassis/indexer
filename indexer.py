@@ -1,4 +1,4 @@
-from file_writer import get_corpus_jsons, write_partial_index, merge_inverted_lists, create_document_index, clean_files, write_output, get_next_inverted_list_number
+from file_manager import get_corpus_jsons, write_partial_index, merge_inverted_lists, create_document_index, clean_files, write_output, get_next_inverted_list_number
 import os
 import sys
 import resource
@@ -15,6 +15,7 @@ from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 
+# se estiver dando erro na maquina na hora de baixar, favor remover esses ifs de download
 if not nltk.corpus.stopwords.words('english'):
     nltk.download('stopwords')
 
@@ -31,7 +32,6 @@ def get_memory_limit_value():
 
 def memory_limit():
     limit = get_memory_limit_value()
-    print(resource.RLIMIT_AS, limit)
     resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
 
 
@@ -66,10 +66,8 @@ def indexer(doc_id, words, inverted_list):
     # print("INDEXER: usage:", memory_usage / MEGABYTE,
     #       "MB", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
     # end of memory logs
-    # se tiver passando de 40% da memória, precisa liberar para continuar a leitura
+    # se tiver passando de 50% da memória, precisa liberar para continuar a leitura
     if memory_usage > get_memory_limit_value() * 0.5:
-        print("memoria vai estourar", memory_usage/MEGABYTE, sys.getsizeof(inverted_list) /
-              MEGABYTE, usage / MEGABYTE, get_memory_limit_value() / MEGABYTE)
         write_partial_index(inverted_list, list_number, args.index_path)
 
         list_number = get_next_inverted_list_number(args.index_path)
@@ -77,7 +75,6 @@ def indexer(doc_id, words, inverted_list):
         gc.collect()
         usage = resource.getrusage(
             resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
-        print("after collection", usage)
 
 
 def tokenize(text):
@@ -95,7 +92,7 @@ def tokenize(text):
 
 
 def process_corpus_chunk(chunk, inverted_list):
-    print("corpus chunk!",sys.getsizeof(inverted_list))
+    iteration = 0
     for index, doc in chunk.iterrows():
         doc_id = int(doc['id'])
         text = doc['text']
@@ -103,10 +100,12 @@ def process_corpus_chunk(chunk, inverted_list):
 
         indexer(doc_id, words, inverted_list)
         create_document_index(doc_id, words, args.index_path)
-    if index == len(chunk) - 1:
-        list_number = get_next_inverted_list_number(args.index_path)
-        write_partial_index(inverted_list, list_number, args.index_path)
-        inverted_list.clear()
+        iteration += 1
+        if iteration == len(chunk) - 1:
+            list_number = get_next_inverted_list_number(args.index_path)
+            write_partial_index(inverted_list, list_number, args.index_path)
+            inverted_list.clear()
+
 
 def process_corpus(num_threads):
     inverted_list = {}
@@ -115,7 +114,6 @@ def process_corpus(num_threads):
     future_indexes = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=num_threads) as executor:
         for chunk in get_corpus_jsons(get_memory_limit_value(), num_threads, args.corpus_path):
-            print("INDEX?:: ", it, " --- ", sys.getsizeof(chunk) / MEGABYTE)
             future = executor.submit(
                 process_corpus_chunk, chunk, inverted_list)
             future_indexes.append(future)
@@ -127,8 +125,6 @@ def process_corpus(num_threads):
             usage = resource.getrusage(
                 resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
 
-            print("POOL: usage:", memory_usage / MEGABYTE, "MB", "resource usage:", usage / MEGABYTE,
-                  "MB\n", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
             it += 1
             if (it % num_threads == 0):
                 for future in future_indexes:
@@ -137,18 +133,15 @@ def process_corpus(num_threads):
 
 
 def main():
-    print("start")
     tracemalloc.start()
-
-    clean_files(args.index_path)
 
     start = time.time()
 
-    NUM_THREADS = 6
+    NUM_THREADS = 8
 
-    print("before process")
+    # inicia processo de indexacao
     process_corpus(NUM_THREADS)
-    print("after process")
+
     pid = os.getpid()
     process = psutil.Process(pid)
     with open(args.index_path + "/log.txt", "a+") as flog:
@@ -158,18 +151,12 @@ def main():
 
     end = time.time()
 
-    print("******end indexer::", end - start)
-
-    start_merge = time.time()
-
     merge_inverted_lists(get_memory_limit_value(), args.index_path)
 
     end_merge = time.time()
     with open(args.index_path + "/log.txt", "a+") as flog:
         flog.write("\nThe end::" + str(end - start))
     flog.close()
-
-    print("MERGE INDEXER endED::", end_merge - start_merge)
 
     write_output(end_merge - start, args.index_path)
 
@@ -210,27 +197,5 @@ if __name__ == "__main__":
         usage = resource.getrusage(
             resource.RUSAGE_SELF).ru_maxrss
         print("ERROR | Usage: ", usage / MEGABYTE)
-        # Obter uma lista das estatísticas de alocação de memória atuais
-        snapshot = tracemalloc.take_snapshot()
-
-        # Filtrar as estatísticas para incluir apenas as linhas de código que alocam memória para variáveis
-        stats = [stat for stat in snapshot.statistics(
-            'traceback') if stat.traceback]
-
-        # Agrupar as estatísticas por objeto e somar as alocações de memória para cada objeto
-        mem_by_obj = {}
-        for stat in stats:
-            obj = stat.traceback.format()  # Representação em string da pilha de chamadas
-            mem = stat.size / 1024 / 1024  # Converter para KB
-            mem_by_obj[tuple(obj)] = mem_by_obj.get(tuple(obj), 0) + mem
-
-        # Ordenar as variáveis pela quantidade de memória usada
-        sorted_mem_by_obj = sorted(
-            mem_by_obj.items(), key=lambda x: x[1], reverse=True)
-
-        # Imprimir as variáveis e a quantidade de memória usada
-        print("[ Top 10 Variáveis ]")
-        for obj, mem in sorted_mem_by_obj[:10]:
-            print(f"{obj}: {mem:.1f} MB")
         sys.stderr.write('\n\nERROR: Memory Exception\n')
         sys.exit(1)

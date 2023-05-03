@@ -2,8 +2,6 @@ import os
 import math
 import json
 import pandas
-import glob
-import heapq
 import psutil
 
 MEGABYTE = 1024 * 1024
@@ -19,12 +17,9 @@ def get_corpus_jsons(memory_limit, num_threads, corpus_path):
             num_lines += 1
     file.close()
 
-    print(num_lines)
     line_size = (corpus_size / num_lines) * 20
-    # salva 40% da memória para leitura
-    chunksize = int(math.floor(
-        ((memory_limit*0.5) / line_size)/num_threads))
-    print(line_size, chunksize)
+    # salva 50% da memória para leitura
+    chunksize = int(math.floor(((memory_limit*0.5) / line_size))/num_threads)
 
     if chunksize < 1:
         chunksize = 1
@@ -40,7 +35,6 @@ def sort_list(list):
 
 
 def write_partial_index(inverted_list, list_number, index_path):
-    print("list number:::", list_number)
     filename = f'{index_path}/inverted_list_{list_number}.txt'
 
     sorted_list = sort_list(inverted_list)
@@ -75,13 +69,13 @@ def merge_dicts(d1, d2):
 def read_jsons(file_list, chunk_size):
     files = [open(file_name, 'r') for file_name in file_list]
     while True:
-        pid = os.getpid()
-        process = psutil.Process(pid)
-        memory_usage = process.memory_info().rss
-        mem = psutil.virtual_memory()
-        available_mem = mem.available / (1024 * 1024)  # convert to MB
-        # print(f"Available memory: {available_mem:.2f} MB chunk: {chunk_size} usage: memory_usage")
-        chunks = [f.read(math.floor(chunk_size/10)) for f in files]
+        chunks = []
+        for f in files:
+            try:
+                chunks.append(f.read(math.floor(chunk_size/10)))
+            except UnicodeDecodeError:
+                # pula dados nao possiveis de ler UTF-8
+                pass
         if not any(chunks):
             break
         data = []
@@ -98,12 +92,12 @@ def read_jsons(file_list, chunk_size):
                         pass
                 data.append(output_dict)
         yield data
+
     for f in files:
         f.close()
 
 
 def merge_inverted_lists(memory_limit, index_path):
-    print("---------------STARTED MERGING---------------")
     output_file = index_path + '/index.txt'
 
     filenames = os.listdir(index_path)
@@ -113,7 +107,6 @@ def merge_inverted_lists(memory_limit, index_path):
     number_of_files = len(filenames)
     chunk_size = math.floor((memory_limit / 10) / number_of_files)
 
-    print("unitil here is ok", chunk_size, filenames)
     last_position = 0
     with open(output_file, 'w') as f:
         for chunks in read_jsons(filenames, chunk_size):
@@ -176,15 +169,16 @@ def write_output(elapsed_time, index_path):
 
     f_out.close()
 
-    print(data)
-
 
 def get_next_inverted_list_number(directory):
     files = os.listdir(directory)
     inverted_list_files = [f for f in files if f.startswith('inverted_list_')]
     if not inverted_list_files:
         return 0
-    last_file = sorted(inverted_list_files)[-1]
-    last_number = int(last_file.split('_')[-1])
-    print("last number", last_number)
+    sorted_files = []
+    for f in inverted_list_files:
+        last_number = int(f.split('.')[0].split('_')[-1])
+        sorted_files.append(last_number)
+    sorted_files = sorted(sorted_files)
+    last_number = sorted_files[-1]
     return last_number + 1
