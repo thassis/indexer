@@ -48,7 +48,6 @@ def filter_word(word):
 
 
 def indexer(doc_id, words, inverted_list):
-
     for word in words:
         if word == "" or word == '' or len(word) == 0:
             pass
@@ -57,22 +56,28 @@ def indexer(doc_id, words, inverted_list):
         inverted_list[word].append(doc_id)
 
     # memory logs
+    usage = resource.getrusage(
+        resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
     # get the available memory in bytes
     pid = os.getpid()
     process = psutil.Process(pid)
     memory_usage = process.memory_info().rss
 
     # print("INDEXER: usage:", memory_usage / MEGABYTE,
-    #       "MB", sys.getsizeof(inverted_list))
+    #       "MB", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
     # end of memory logs
     # se tiver passando de 40% da memória, precisa liberar para continuar a leitura
     if memory_usage > get_memory_limit_value() * 0.5:
         print("memoria vai estourar", memory_usage/MEGABYTE, sys.getsizeof(inverted_list) /
-              MEGABYTE, get_memory_limit_value() / MEGABYTE)
+              MEGABYTE, usage / MEGABYTE, get_memory_limit_value() / MEGABYTE)
         write_partial_index(inverted_list, list_number, args.index_path)
 
         list_number = get_next_inverted_list_number(args.index_path)
         inverted_list.clear()
+        gc.collect()
+        usage = resource.getrusage(
+            resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
+        print("after collection", usage)
 
 
 def tokenize(text):
@@ -90,23 +95,22 @@ def tokenize(text):
 
 
 def process_corpus_chunk(chunk, inverted_list):
-    print("corpus chunk!")
+    print("corpus chunk!",sys.getsizeof(inverted_list))
     for index, doc in chunk.iterrows():
         doc_id = int(doc['id'])
         text = doc['text']
-        tokens = tokenize(text)
-        indexer(doc_id, tokens, inverted_list)
-        create_document_index(doc_id, tokens, args.index_path)
+        words = tokenize(text)
 
-        if index == len(chunk) - 1:
-            print("last doc do chunk")
-            list_number = get_next_inverted_list_number(args.index_path)
-            write_partial_index(inverted_list, list_number, args.index_path)
-            inverted_list.clear()
-
+        indexer(doc_id, words, inverted_list)
+        create_document_index(doc_id, words, args.index_path)
+    if index == len(chunk) - 1:
+        list_number = get_next_inverted_list_number(args.index_path)
+        write_partial_index(inverted_list, list_number, args.index_path)
+        inverted_list.clear()
 
 def process_corpus(num_threads):
     inverted_list = {}
+    threads = []
     it = 0
     future_indexes = []
     with concurrent.futures.ProcessPoolExecutor(max_workers=num_threads) as executor:
@@ -120,13 +124,16 @@ def process_corpus(num_threads):
             memory_usage = process.memory_info().rss
 
             # get the available memory in bytes
+            usage = resource.getrusage(
+                resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
 
-            print("POOL: usage:", memory_usage / MEGABYTE, "MB", "resource usage:",
+            print("POOL: usage:", memory_usage / MEGABYTE, "MB", "resource usage:", usage / MEGABYTE,
                   "MB\n", get_memory_limit_value() / MEGABYTE, psutil.virtual_memory().total / MEGABYTE)
             it += 1
             if (it % num_threads == 0):
                 for future in future_indexes:
-                    print("future")
+                    future.result()
+                    # Process the result here
 
 
 def main():
@@ -137,7 +144,7 @@ def main():
 
     start = time.time()
 
-    NUM_THREADS = 2
+    NUM_THREADS = 6
 
     print("before process")
     process_corpus(NUM_THREADS)
@@ -200,6 +207,8 @@ if __name__ == "__main__":
     try:
         main()
     except MemoryError:
+        usage = resource.getrusage(
+            resource.RUSAGE_SELF).ru_maxrss
         print("ERROR | Usage: ", usage / MEGABYTE)
         # Obter uma lista das estatísticas de alocação de memória atuais
         snapshot = tracemalloc.take_snapshot()
