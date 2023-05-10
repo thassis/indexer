@@ -3,7 +3,6 @@ import os
 import sys
 import resource
 import argparse
-import threading
 import psutil
 import time
 import concurrent.futures

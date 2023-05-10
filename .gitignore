@@ -1,5 +1,8 @@
 /pa1/*
 /files/original_corpus.jsonl
 /files/corpus.jsonl
+/files/index.txt
+/files/term_lexicon.txt
+/files/document_index.txt
 /src/__pycache__/*
 /generated_files/*

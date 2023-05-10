@@ -166,6 +166,8 @@ def write_output(elapsed_time, index_path):
 
     with open("output.json", "w") as f_out:
         json.dump(data, f_out)
+    
+    print(data)
 
     f_out.close()
 
