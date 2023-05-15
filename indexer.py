@@ -1,4 +1,5 @@
 from file_manager import get_corpus_jsons, write_partial_index, merge_inverted_lists, create_document_index, clean_files, write_output, get_next_inverted_list_number
+from collections import Counter
 import os
 import sys
 import resource
@@ -47,12 +48,12 @@ def filter_word(word):
 
 
 def indexer(doc_id, words, inverted_list):
-    for word in words:
+    for word, frequency in words.items():
         if word == "" or word == '' or len(word) == 0:
             pass
         if word not in inverted_list:
             inverted_list[word] = []
-        inverted_list[word].append(doc_id)
+        inverted_list[word].append((doc_id, frequency))
 
     # memory logs
     usage = resource.getrusage(
@@ -76,18 +77,36 @@ def indexer(doc_id, words, inverted_list):
             resource.RUSAGE_SELF).ru_maxrss * resource.getpagesize()
 
 
+def count_words(arr):
+    word_counts = Counter()
+
+    for string in arr:
+        words = string.split()
+        word_counts.update(words)
+
+    return word_counts
+
+
 def tokenize(text):
     ps = PorterStemmer()
 
     stop_words = set(stopwords.words('english'))
 
-    tokens = word_tokenize(text.lower())
+    tokens = text.split()
+    words_counted = count_words(tokens)
     words = []
     for token in tokens:
         filtered_token = filter_word(token)
         if filtered_token not in stop_words and len(filtered_token) != 0 and filtered_token != "":
-            words.append(ps.stem(filtered_token))
-    return words
+            words.append((filtered_token, words_counted[filtered_token]))
+    result = {}
+    for word, value in words:
+        stemmed = ps.stem(word)
+        if stemmed not in result:
+            result[stemmed] = 0
+        result[stemmed] += value
+
+    return result
 
 
 def process_corpus_chunk(chunk, inverted_list):
@@ -100,7 +119,7 @@ def process_corpus_chunk(chunk, inverted_list):
         indexer(doc_id, words, inverted_list)
         create_document_index(doc_id, words, args.index_path)
         iteration += 1
-        if iteration == len(chunk) - 1:
+        if iteration == len(chunk):
             list_number = get_next_inverted_list_number(args.index_path)
             write_partial_index(inverted_list, list_number, args.index_path)
             inverted_list.clear()
@@ -132,14 +151,15 @@ def process_corpus(num_threads):
 
 
 def main():
+    # clean_files(args.index_path)
     tracemalloc.start()
 
     start = time.time()
 
-    NUM_THREADS = 8
+    NUM_THREADS = 4
 
     # inicia processo de indexacao
-    process_corpus(NUM_THREADS)
+    # process_corpus(NUM_THREADS)
 
     pid = os.getpid()
     process = psutil.Process(pid)

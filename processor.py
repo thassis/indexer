@@ -1,5 +1,5 @@
 
-from processor_file_manager import get_queries, get_index
+from processor_file_manager import get_queries, get_index, get_number_of_documents_corpus
 import os
 import sys
 import resource
@@ -15,22 +15,51 @@ import nltk
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
+import math
 
 NUMBER_OF_DOCUMENTS = 10
 
-def daat(query_tokens, index, k):
+
+def tfidf(index, term, tf, number_documents_corpus):
+
+    # idf == log(n+1)/nw
+    idf = math.log10(number_documents_corpus + 1) * len(index[term])
+
+    tfidf = tf * idf
+    return tfidf
+
+
+def bm25(index, term, tf, number_documents_corpus):
+    k1 = 0.5
+    b = 0.5
+    idf = math.log10(number_documents_corpus + 1) * len(index[term])
+
+    # IDF x (f * (k1 + 1)) / (f + k1 * (1 - b + b * (Ld / Lavg)))
+    # bm25 = idf * (tf * (k1+1)) / (tf + k1*((1-b) + b*))
+
+    return bm25
+
+
+def daat(query_tokens, index, k, number_documents_corpus):
+    print(len(index))
     results = []
     for target in range(1, len(index)):
         score = 0
         for term in query_tokens:
             postings = index[term]
-            for docid in postings:
+            for (docid, frequency) in postings:
+                # print(term, docid, frequency)
                 if docid == target:
-                    score += 1
-                    #se já achou o target, entao pode pular para o próximo termo.
+                    if args.ranker == "TFIDF":
+                        score += tfidf(index, target, frequency,
+                                       number_documents_corpus)
+                    else:
+                        score += tfidf(index, target, frequency,
+                                       number_documents_corpus)
+                    # se já achou o target, entao pode pular para o próximo termo.
                     break
                 elif docid > target:
-                    #se já passou do target, entao também pode pular para o próximo termo.
+                    # se já passou do target, entao também pode pular para o próximo termo.
                     break
         if score > 0:
             heapq.heappush(results, (score, target))
@@ -38,31 +67,50 @@ def daat(query_tokens, index, k):
                 heapq.heappop(results)
     return sorted(results, reverse=True)
 
+
+def filter_word(word):
+    if "'" in word:
+        word = word.replace("'", "")
+    if '"' in word:
+        word = word.replace('"', "")
+    if '\\' in word:
+        word = word.replace("\\", "")
+    if ' ' in word:
+        word = word.replace(" ", "")
+    return word
+
+
 def tokenize(text):
     ps = PorterStemmer()
 
     stop_words = set(stopwords.words('english'))
 
-    tokens = word_tokenize(text.lower())
+    tokens = text.split()
     words = []
     for token in tokens:
-        if token not in stop_words and len(token) != 0 and token != "":
-            words.append(ps.stem(token))
+        filtered_token = filter_word(token)
+        if filtered_token not in stop_words and len(filtered_token) != 0 and filtered_token != "":
+            words.append(ps.stem(filtered_token))
     return words
+
 
 def main():
     queries = get_queries(args.queries_path)
-    
-    index = get_index(args.index_path) 
 
-    #inicia processamento de cada query
+    index = get_index(args.index_path)
+
+    number_documents_corpus = get_number_of_documents_corpus(args.index_path)
+
+    # inicia processamento de cada query
     for query in queries:
         tokens = tokenize(query)
-        print(f"QUERY {query}: ", daat(tokens, index, NUMBER_OF_DOCUMENTS))
+        print(f"QUERY {query}: ", daat(tokens, index,
+              NUMBER_OF_DOCUMENTS, number_documents_corpus))
 
     print(queries)
 
-    #inicia processamento
+    # inicia processamento
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
@@ -94,5 +142,5 @@ if __name__ == "__main__":
         help='a string informing the ranking function (either "TFIDF" or "BM25") to be used to score documents for each query.'
     )
     args = parser.parse_args()
-    
+
     main()

@@ -3,6 +3,7 @@ import math
 import json
 import pandas
 import psutil
+from ast import literal_eval
 
 MEGABYTE = 1024 * 1024
 
@@ -20,7 +21,7 @@ def get_corpus_jsons(memory_limit, num_threads, corpus_path):
     line_size = (corpus_size / num_lines) * 20
     # salva 50% da memória para leitura
     chunksize = int(math.floor(((memory_limit*0.5) / line_size))/num_threads)
-
+    print(chunksize)
     if chunksize < 1:
         chunksize = 1
     return pandas.read_json(corpus_path, lines=True, chunksize=chunksize)
@@ -60,7 +61,7 @@ def merge_dicts(d1, d2):
     result = d1.copy()
     for key, value in d2.items():
         if key in result:
-            result[key].extend(value)
+            result[key] = result[key] + ',' + value
         else:
             result[key] = value
     return result
@@ -79,15 +80,23 @@ def read_jsons(file_list, chunk_size):
         if not any(chunks):
             break
         data = []
+        ecount = 0
         for chunk in chunks:
             if (chunk):
                 output_dict = {}
                 for line in chunk.splitlines():
                     try:
+                        # print(line)
                         key, value_str = line.split(':', 1)
-                        value = json.loads(value_str.strip())
-                        output_dict[key.strip()] = value
-                    except (ValueError, json.JSONDecodeError):
+                        output_dict[key.strip()] = value_str
+                    except TypeError as e:
+                        print("Type error", e)
+                        pass
+                    except ValueError as e:
+                        ecount += 1
+                        pass
+                    except SyntaxError as e:
+                        print("Syntax error>", e)
                         # Linha inválida ou incompleta, ignorar
                         pass
                 data.append(output_dict)
@@ -166,7 +175,7 @@ def write_output(elapsed_time, index_path):
 
     with open("output.json", "w") as f_out:
         json.dump(data, f_out)
-    
+
     print(data)
 
     f_out.close()
