@@ -89,7 +89,7 @@ def tokenize(text):
     words = []
     for token in tokens:
         filtered_token = filter_word(token)
-        if filtered_token not in stop_words and len(filtered_token) != 0 and filtered_token != "":
+        if filtered_token not in stop_words and len(filtered_token) != 0 and filtered_token != "" and ps.stem(filtered_token) not in words:
             words.append(ps.stem(filtered_token))
     return words
 
