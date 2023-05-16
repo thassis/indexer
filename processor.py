@@ -20,10 +20,13 @@ import math
 NUMBER_OF_DOCUMENTS = 10
 
 
-def tfidf(index, term, tf, number_documents_corpus):
-
+def get_idf(number_documents_corpus, index, term):
     # idf == log(n+1)/nw
-    idf = math.log10(number_documents_corpus + 1) * len(index[term])
+    return math.log10(number_documents_corpus + 1) * len(index[term])
+
+
+def tfidf(index, term, tf, number_documents_corpus):
+    idf = get_idf(number_documents_corpus, index, term)
 
     value_tfidf = tf * idf
     return value_tfidf
@@ -32,42 +35,54 @@ def tfidf(index, term, tf, number_documents_corpus):
 def bm25(index, term, tf, number_documents_corpus, doc_id, document_index, avg_terms_document):
     k1 = 1.5
     b = 0.5
-    idf = math.log10(number_documents_corpus + 1) * len(index[term])
 
-    # IDF x (f * (k1 + 1)) / (f + k1 * (1 - b + b * (Ld / Lavg)))
-    value_bm25 = idf * (tf * (k1+1)) / (tf + k1*((1-b) + b*(document_index[str(doc_id)] / avg_terms_document)))
+    idf = get_idf(number_documents_corpus, index, term)
+
+    # IDF x (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (|d| / avdl)))
+    value_bm25 = idf * (tf * (k1+1)) / (tf + k1*((1-b) +
+                                                 b*(document_index[str(doc_id)] / avg_terms_document)))
 
     return value_bm25
 
 
 def daat(query_tokens, index, k, number_documents_corpus, document_index, avg_terms_document):
     results = []
-    for target in range(1, len(index)):
+    # pecorre cada documento presente no document index
+    for target in document_index.keys():
         score = 0
         for term in query_tokens:
             postings = index[term]
+            # no processo de conversao do index, alguns elementos ficaram com valor None.
             if postings is not None:
                 for (docid, frequency) in postings:
+                    # se o doc_id em questão for o alvo que está sendo analisado, entao faz o processo de ranking
                     if docid == target:
                         if args.ranker == "TFIDF":
                             score += tfidf(index, term, frequency,
-                                        number_documents_corpus)
+                                           number_documents_corpus)
                         else:
                             score += bm25(index, term, frequency,
-                                        number_documents_corpus, target, document_index, avg_terms_document)
+                                          number_documents_corpus, target, document_index, avg_terms_document)
                         # se já achou o target, entao pode pular para o próximo termo.
                         break
                     elif docid > target:
                         # se já passou do target, entao também pode pular para o próximo termo.
                         break
         if score > 0:
-            heapq.heappush(results, (score, target))
+            heapq.heappush(results, (-score, target))
+
+            """
+                a pilha heapq já salva ordenando os elementos de acordo com o primeiro valor da tupla, 
+                nesse caso o score maior deve ficar no primeiro elemento, por isso a multiplicação por -1.
+                Dessa forma, pode-se retirar o último documento salvo caso ultrapasse k
+            """
             if len(results) > k:
                 heapq.heappop(results)
-    results = sorted(results, reverse=True)
+
+    # convert a pilha para o formato especificado no tp
     dict_results = []
     for r in results:
-        dict_results.append({"ID": r[1], "Score": r[0]})
+        dict_results.append({"ID": r[1], "Score": -r[0]})
     return dict_results
 
 
@@ -90,6 +105,7 @@ def tokenize(text):
 
     tokens = text.split()
     words = []
+
     for token in tokens:
         filtered_token = filter_word(token)
         if filtered_token not in stop_words and len(filtered_token) != 0 and filtered_token != "" and ps.stem(filtered_token) not in words:
@@ -107,15 +123,21 @@ def main():
     print('avg_terms_document', avg_terms_document, "len index: ", len(index))
     number_documents_corpus = get_number_of_documents_corpus(args.index_path)
 
+    start_time_query = time.time()
+
     # inicia processamento de cada query
     for query in queries:
         tokens = tokenize(query)
 
         result = daat(tokens, index,
-              NUMBER_OF_DOCUMENTS, number_documents_corpus, document_index, avg_terms_document)
+                      NUMBER_OF_DOCUMENTS, number_documents_corpus, document_index, avg_terms_document)
+
         output = {"Query": query, "Results": result}
         print(output)
-    # inicia processamento
+
+    end_time_query = time.time()
+
+    print(f"Tempo para processar queries: {end_time_query - start_time_query}")
 
 
 if __name__ == "__main__":

@@ -12,42 +12,48 @@ def get_queries(path):
 def get_index(path):
     start = time.time()
 
-    if path[-1] != '/': path += '/'
+    if path[-1] != '/':
+        path += '/'
     with open(path + "index.txt", 'r') as f:
         data = {}
         # iterar sobre as linhas e extrair as palavras e os arrays de documentos
         for linha in f:
             try:
-                # linha = linha.replace("[", "")
-                # linha = linha.replace("]", "")
                 linha = linha.replace(" ", "")
-                aux = linha.split(':[(')
-                # if len(aux) == 1:
-                #     aux = linha.split(": [(")
-                aux[1] = '[(' + aux[1]
-                palavra = aux[0]
+
+                # quebra a linha para pegar a termo e depois seus postings
+                splited_line = linha.split(':[(')
+
+                palavra = splited_line[0]
+
                 documentos = []
-                aux[1] = aux[1].replace("[", "")
-                aux[1] = aux[1].replace("]", "")
-                aux[1] = aux[1].replace(" ", "")
-                aux[1] = aux[1].replace(":", "")
-                # aux[1] = aux[1].replace(":", "")
-                aux[1] = aux[1]
-                docs = aux[1].split('),')
-                # print(docs)
+
+                # faz um tratamento da string para converter os valores lidos em um array de tuplas
+                splited_line[1] = '[(' + splited_line[1]
+                splited_line[1] = splited_line[1].replace("[", "")
+                splited_line[1] = splited_line[1].replace("]", "")
+                splited_line[1] = splited_line[1].replace(" ", "")
+                splited_line[1] = splited_line[1].replace(":", "")
+                splited_line[1] = splited_line[1]
+
+                # separa os documentos em um array
+                docs = splited_line[1].split('),')
+
                 for doc in docs:
                     doc.replace('\n', '')
                     doc.replace(' ', '')
-                    # print(doc)
                     if ')' not in doc:
                         doc += ")"
+
                     try:
+                        # transforma o documento numa tupla para salvá-lo
                         literal_doc = ast.literal_eval(doc)
                         documentos.append(literal_doc)
                     except:
-                        # print('**' + doc + '++', doc[-1])
+                        # alguns documentos tiveram a formatação incorreta, pois o corpus tinha muitas caracteres que invalidaram a conversão
                         pass
-                # print(len(documentos)
+
+                # com a string de documentos convertida para um array de tuplas, salva no dicionário os documentos referentes a cada palavra da lista invertida
                 if documentos is not None:
                     if palavra in data:
                         if data[palavra] is not None:
@@ -56,36 +62,34 @@ def get_index(path):
                             data[palavra] = documentos
                     else:
                         data[palavra] = documentos
-                # except SyntaxError:
-                #     print('name error::' + linha)
-                #     break
             except IndexError:
-                # print('index error', linha)
+                # alguns documentos tiveram a formatação incorreta, pois o corpus tinha muitas caracteres que invalidaram a conversão
                 pass
-            # except:
-            # print('deu erro aqui', aux[0])
-            # pass
         end = time.time()
 
         print("Tempo para ler index: ", end - start)
+
         return data
 
 
 def get_number_of_documents_corpus(path):
-    if path[-1] != '/': path += '/'
+    if path[-1] != '/':
+        path += '/'
     with open(path + "index.txt", 'r') as file:
         lines = file.readlines()
     return len(lines)
 
+
 def get_document_index(path):
-    if path[-1] != '/': path += '/'
+    if path[-1] != '/':
+        path += '/'
     data = {}
     with open(path + "document_index.txt", 'r') as f:
         for line in f:
             doc = line.split(': ')
             doc[1] = int(doc[1])
             if doc[0] in data:
-                data[doc[0]] += doc[1] 
+                data[doc[0]] += doc[1]
             else:
                 data[doc[0]] = doc[1]
     sum = 0
