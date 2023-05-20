@@ -65,7 +65,7 @@ def daat(query_tokens, index, k, number_documents_corpus, document_index, avg_te
                                           number_documents_corpus, target, document_index, avg_terms_document)
                         # se já achou o target, entao pode pular para o próximo termo.
                         break
-                    elif docid > target:
+                    elif int(docid) > int(target):
                         # se já passou do target, entao também pode pular para o próximo termo.
                         break
         if score > 0:
@@ -80,6 +80,8 @@ def daat(query_tokens, index, k, number_documents_corpus, document_index, avg_te
                 heapq.heappop(results)
 
     # convert a pilha para o formato especificado no tp
+    print("results", results)
+
     dict_results = []
     for r in results:
         dict_results.append({"ID": r[1], "Score": -r[0]})
