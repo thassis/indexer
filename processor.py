@@ -10,6 +10,8 @@ import concurrent.futures
 import gc
 import heapq
 
+import re
+
 import nltk
 
 from nltk.stem import PorterStemmer
@@ -33,8 +35,8 @@ def tfidf(index, term, tf, number_documents_corpus):
 
 
 def bm25(index, term, tf, number_documents_corpus, doc_id, document_index, avg_terms_document):
-    k1 = 1.5
-    b = 0.5
+    k1 = 1.75
+    b = 1
 
     idf = get_idf(number_documents_corpus, index, term)
 
@@ -56,8 +58,13 @@ def daat(query_tokens, index, k, number_documents_corpus, document_index, avg_te
             if postings is not None:
                 for (docid, frequency) in postings:
                     # se o doc_id em questão for o alvo que está sendo analisado, entao faz o processo de ranking
-                    if docid == target:
-                        if args.ranker == "TFIDF":
+                    if int(docid) == int(target):
+                        if int(target) == 392319:
+                            print("tfidf:", tfidf(index, term, frequency,
+                                           number_documents_corpus), "bm25", bm25(index, term, frequency,
+                                          number_documents_corpus, target, document_index, avg_terms_document), index, term, frequency,
+                                          number_documents_corpus, target, document_index, avg_terms_document, get_idf(number_documents_corpus, index, term))
+                        if args.ranker == "TFIDF":        
                             score += tfidf(index, term, frequency,
                                            number_documents_corpus)
                         else:
@@ -80,8 +87,6 @@ def daat(query_tokens, index, k, number_documents_corpus, document_index, avg_te
                 heapq.heappop(results)
 
     # convert a pilha para o formato especificado no tp
-    print("results", results)
-
     dict_results = []
     for r in results:
         dict_results.append({"ID": r[1], "Score": -r[0]})
@@ -105,17 +110,30 @@ def tokenize(text):
 
     stop_words = set(stopwords.words('english'))
 
-    tokens = text.split()
-    words = []
+    tokens = word_tokenize(text)
+
+    cleaned_tokens = []
 
     for token in tokens:
+        #Remove caracteres estranhos
+        clean_token = re.sub(r'[^a-zA-Z0-9]', '', token)
+        
+        if clean_token:
+            cleaned_tokens.append(clean_token)
+
+    final_words = []
+
+    for token in cleaned_tokens:
         filtered_token = filter_word(token)
-        if filtered_token not in stop_words and len(filtered_token) != 0 and filtered_token != "" and ps.stem(filtered_token) not in words:
-            words.append(ps.stem(filtered_token))
-    return words
+        if filtered_token not in stop_words and len(filtered_token) != 0 and filtered_token != "" and ps.stem(filtered_token) not in final_words:
+            final_words.append(ps.stem(filtered_token))
+    print(final_words)
+    return final_words
 
 
 def main():
+    a = tokenize("just testing, a ,query")
+
     queries = get_queries(args.queries_path)
 
     index = get_index(args.index_path)

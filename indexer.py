@@ -9,6 +9,7 @@ import time
 import concurrent.futures
 import gc
 import tracemalloc
+import re 
 
 import nltk
 from nltk.stem import PorterStemmer
@@ -100,11 +101,22 @@ def tokenize(text):
         if filtered_token not in stop_words and len(filtered_token) != 0 and filtered_token != "":
             words.append((filtered_token, words_counted[filtered_token]))
     result = {}
+
     for word, value in words:
-        stemmed = ps.stem(word)
-        if stemmed not in result:
-            result[stemmed] = 0
-        result[stemmed] += value
+        nltk_tokens = word_tokenize(word)
+        cleaned_tokens = []
+
+        for token in nltk_tokens:
+            #Remove caracteres estranhos
+            clean_token = re.sub(r'[^a-zA-Z0-9]', '', token)
+        
+            if clean_token:
+                cleaned_tokens.append(ps.stem(clean_token))
+                
+        for stemmed in cleaned_tokens:
+            if stemmed not in result:
+                result[stemmed] = 0
+            result[stemmed] += value
 
     return result
 

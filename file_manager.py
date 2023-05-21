@@ -44,7 +44,8 @@ def write_partial_index(inverted_list, list_number, index_path):
         for i, (key, value) in enumerate(sorted_list.items()):
             if key == "" or key == '' or len(key) == 0 or not key:
                 pass
-            f.write(f'{key}: {value}\n')
+            string_representation = ', '.join([f'({x}, {y})' for x, y in value])
+            f.write(f'{key}: {string_representation}\n')
 
     f.close()
 
@@ -80,7 +81,6 @@ def read_jsons(file_list, chunk_size):
         if not any(chunks):
             break
         data = []
-        ecount = 0
         for chunk in chunks:
             if (chunk):
                 output_dict = {}
@@ -93,7 +93,6 @@ def read_jsons(file_list, chunk_size):
                         print("Type error", e)
                         pass
                     except ValueError as e:
-                        ecount += 1
                         pass
                     except SyntaxError as e:
                         print("Syntax error>", e)
@@ -124,7 +123,7 @@ def merge_inverted_lists(memory_limit, index_path):
                 merged_data = merge_dicts(merged_data, chunk)
             sorted_data = sort_list(merged_data)
             for key, value in sorted_data.items():
-                f.write(key + ": " + str(value) + "\n")
+                f.write(key + ":" + str(value) + "\n")
 
             pid = os.getpid()
             process = psutil.Process(pid)
