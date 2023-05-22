@@ -9,6 +9,7 @@ import time
 import concurrent.futures
 import gc
 import heapq
+import ast
 
 import re
 
@@ -132,8 +133,6 @@ def tokenize(text):
 
 
 def main():
-    a = tokenize("just testing, a ,query")
-
     queries = get_queries(args.queries_path)
 
     index = get_index(args.index_path)

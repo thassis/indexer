@@ -1,101 +1,79 @@
 import time
 import ast
 import re
-
+import sys
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer
 
 def get_queries(path):
-    print("before the problem")
     with open(path, 'r') as f:
         lines = f.readlines()
         string_array = [line.strip() for line in lines]
-    print("after reading", string_array)
     return string_array
 
 
 def get_index(path):
-    ps = PorterStemmer()
+    data_index = {}
+    lines_with_error = 0
     start = time.time()
 
     if path[-1] != '/':
         path += '/'
     with open(path + "index.txt", 'r') as f:
-        data = {}
         # iterar sobre as linhas e extrair as palavras e os arrays de documents
         for linha in f:
-            try:
-                linha = linha.replace(" ", "")
+            # quebra a linha para pegar a termo e depois seus postings
+            splited_line = linha.split(':')
+            
+            processed_word = splited_line[0] 
+            documents = []
 
-                # quebra a linha para pegar a termo e depois seus postings
-                splited_line = linha.split(':[(')
 
-                raw_words = splited_line[0]
+            # separa os documents em um array
+            docs = splited_line[1].split('),')
 
-                tokens = word_tokenize(raw_words)
+            for doc in docs:
+                doc = doc.replace('\n', '')
+                doc = doc.replace(' ', '')
 
-                cleaned_tokens = []
+                if doc is not None and type(doc) == str and len(doc) > 0:
+                    if doc[-1] != ')':
+                        doc = doc + ')'
+                try:
+                    # transforma o documento numa tupla para salvá-lo
+                    doc = doc.replace(",,", ",1),")
+                    pattern = r"(\d+),\("
+                    replacement = r"\1,1),("
+                    updated_data = re.sub(pattern, replacement, doc)
+                    updated_data = updated_data.replace('(,', '')
 
-                for token in tokens:
-                    #Remove caracteres estranhos
-                    clean_token = re.sub(r'[^a-zA-Z0-9]', '', token)
-                   
-                    if clean_token:
-                        cleaned_tokens.append(ps.stem(clean_token))
-                for processed_word in cleaned_tokens:                        
-                    documents = []
+                    if len(updated_data) > 0 and updated_data[0] == ',':
+                        updated_data = updated_data[1:]
+                    literal_doc = ast.literal_eval(updated_data)
+                    documents.append(literal_doc)
+                except Exception as e:
+                    lines_with_error += 1
+                    pass
 
-                    # faz um tratamento da string para converter os valores lidos em um array de tuplas
-                    splited_line[1] = '[(' + splited_line[1]
-                    splited_line[1] = splited_line[1].replace("[", "")
-                    splited_line[1] = splited_line[1].replace("]", "")
-                    splited_line[1] = splited_line[1].replace(" ", "")
-                    splited_line[1] = splited_line[1].replace(":", "")
-                    splited_line[1] = splited_line[1]
-
-                    # separa os documents em um array
-                    docs = splited_line[1].split('),')
-
-                    for doc in docs:
-                        doc = doc.replace('\n', '')
-                        doc = doc.replace(' ', '')
-                        doc = doc.replace('(', '')
-                        doc = doc.replace(')', '')                        
-                        doc = '(' + doc + ')'
-
-                        try:
-                            # transforma o documento numa tupla para salvá-lo
-                            literal_doc = ast.literal_eval(doc)
-                            documents.append(literal_doc)
-                        except:
-                            if processed_word == 'appl':
-                                print('*****',linha)
-                                break
-                            # alguns documents tiveram a formatação incorreta, pois o corpus tinha muitas caracteres que invalidaram a conversão
-                            # print(doc)
-                            # print('eita', linha)
-                            pass
-
-                    # com a string de documents convertida para um array de tuplas, salva no dicionário os documents referentes a cada processed_word da lista invertida
-                    if documents is not None:
-                        if processed_word in data:
-                            if data[processed_word] is not None:
-                                data[processed_word] = data[processed_word].extend(documents)
-                            else:
-                                data[processed_word] = documents
-                        else:
-                            data[processed_word] = documents
-            except IndexError:
-                # alguns documents tiveram a formatação incorreta, pois o corpus tinha muitas caracteres que invalidaram a conversão
-                pass
+            # com a string de documents convertida para um array de tuplas, salva no dicionário os documents referentes a cada processed_word da lista invertida
+            if documents is not None:
+                if processed_word in data_index:
+                    if data_index[processed_word] is not None:
+                        data_index[processed_word] += documents
+                    else:
+                        data_index[processed_word] = documents
+                else:
+                    data_index[processed_word] = documents
+                if processed_word == 'appl':
+                    print(len(documents), len(data_index[processed_word]), processed_word in data_index)
         end = time.time()
 
-        print("Tempo para ler index: ", end - start)
+        print("Tempo para ler index: ", end - start, 'linhas com erro: ', lines_with_error, len(data_index))
 
-        with open(path + 'new_index', 'w') as file:
-            for key, value in data.items():
+        with open(path + 'new_index.txt', 'w') as file:
+            for key, value in data_index.items():
                 file.write(f'{key}: {value}\n')
-        return data
+        return data_index
 
 
 def get_number_of_documents_corpus(path):
