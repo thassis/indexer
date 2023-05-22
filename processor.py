@@ -68,8 +68,7 @@ def process_target(target, query_tokens, index, number_documents_corpus, documen
                     elif int(docid) > int(target):
                         # se já passou do target, entao também pode pular para o próximo termo.
                         break
-        #salva negativo porque vai ser adicionada numa heap crescente depois (removendo os elementos maiores, ou seja, os de menor score)
-        return (-score, target)
+        return (score, target)
     except Exception as e:
         print(e, term, len(index[term]))
 
@@ -128,14 +127,14 @@ def main():
         tokens = tokenize(query)
 
         with ThreadPoolExecutor(max_workers=4) as executor:
-            # pecorre cada documento presente no document index
+            # DAAT - pecorre cada documento presente no document index
             results = list(executor.map(process_target, document_index.keys(), [tokens]*len(document_index), [index]*len(document_index), [number_documents_corpus]*len(document_index), [document_index]*len(document_index), [avg_terms_document]*len(document_index)))
 
         #ordena os elementos num heap e retorna os 10 maiores
         results = heapq.nlargest(NUMBER_OF_DOCUMENTS, results)
         dict_results = []
         for r in results:
-            dict_results.append({"ID": r[1], "Score": -r[0]})
+            dict_results.append({"ID": r[1], "Score": r[0]})
 
         output = {"Query": query, "Results": dict_results}
         print(output)
