@@ -10,6 +10,7 @@ import concurrent.futures
 import gc
 import heapq
 import ast
+from concurrent.futures import ThreadPoolExecutor
 
 import re
 
@@ -47,49 +48,30 @@ def bm25(index, term, tf, number_documents_corpus, doc_id, document_index, avg_t
 
     return value_bm25
 
-
-def daat(query_tokens, index, k, number_documents_corpus, document_index, avg_terms_document):
-    results = []
+def process_target(target, query_tokens, index, number_documents_corpus, document_index, avg_terms_document):
+    score = 0
     try:
-        # pecorre cada documento presente no document index
-        for target in document_index.keys():
-            score = 0
-            for term in query_tokens:
-                postings = index[term]
-                # no processo de conversao do index, alguns elementos ficaram com valor None.
-                if postings is not None:
-                    for (docid, frequency) in postings:
-                        # se o doc_id em questão for o alvo que está sendo analisado, entao faz o processo de ranking
-                        if int(docid) == int(target):
-                            if args.ranker == "TFIDF":        
-                                score += tfidf(index, term, frequency,
-                                            number_documents_corpus)
-                            else:
-                                score += bm25(index, term, frequency,
-                                            number_documents_corpus, target, document_index, avg_terms_document)
-                            # se já achou o target, entao pode pular para o próximo termo.
-                            break
-                        elif int(docid) > int(target):
-                            # se já passou do target, entao também pode pular para o próximo termo.
-                            break
-            if score > 0:
-                heapq.heappush(results, (-score, target))
-
-                """
-                    a pilha heapq já salva ordenando os elementos de acordo com o primeiro valor da tupla, 
-                    nesse caso o score maior deve ficar no primeiro elemento, por isso a multiplicação por -1.
-                    Dessa forma, pode-se retirar o último documento salvo caso ultrapasse k
-                """
-                if len(results) > k:
-                    heapq.heappop(results)
+        for term in query_tokens:
+            postings = index[term]
+            if postings is not None:
+                for (docid, frequency) in postings:
+                    # se o doc_id em questão for o alvo que está sendo analisado, entao faz o processo de ranking
+                    if int(docid) == int(target):
+                        if args.ranker == "TFIDF": 
+                            score += tfidf(index, term, frequency,
+                                        number_documents_corpus)
+                        else:
+                            score += bm25(index, term, frequency,
+                                        number_documents_corpus, target, document_index, avg_terms_document)
+                        # se já achou o target, entao pode pular para o próximo termo.
+                        break
+                    elif int(docid) > int(target):
+                        # se já passou do target, entao também pode pular para o próximo termo.
+                        break
+        #salva negativo porque vai ser adicionada numa heap crescente depois (removendo os elementos maiores, ou seja, os de menor score)
+        return (-score, target)
     except Exception as e:
         print(e, term, len(index[term]))
-    # convert a pilha para o formato especificado no tp
-    dict_results = []
-    for r in results:
-        dict_results.append({"ID": r[1], "Score": -r[0]})
-    return dict_results
-
 
 def filter_word(word):
     if "'" in word:
@@ -125,7 +107,6 @@ def tokenize(text):
         filtered_token = filter_word(token)
         if filtered_token not in stop_words and len(filtered_token) != 0 and filtered_token != "" and ps.stem(filtered_token) not in final_words:
             final_words.append(ps.stem(filtered_token))
-    print(final_words)
     return final_words
 
 
@@ -146,10 +127,17 @@ def main():
     for query in queries:
         tokens = tokenize(query)
 
-        result = daat(tokens, index,
-                      NUMBER_OF_DOCUMENTS, number_documents_corpus, document_index, avg_terms_document)
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            # pecorre cada documento presente no document index
+            results = list(executor.map(process_target, document_index.keys(), [tokens]*len(document_index), [index]*len(document_index), [number_documents_corpus]*len(document_index), [document_index]*len(document_index), [avg_terms_document]*len(document_index)))
 
-        output = {"Query": query, "Results": result}
+        #ordena os elementos num heap e retorna os 10 maiores
+        results = heapq.nlargest(NUMBER_OF_DOCUMENTS, results)
+        dict_results = []
+        for r in results:
+            dict_results.append({"ID": r[1], "Score": -r[0]})
+
+        output = {"Query": query, "Results": dict_results}
         print(output)
 
     end_time_query = time.time()
