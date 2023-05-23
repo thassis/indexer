@@ -1,20 +1,20 @@
 
 from processor_file_manager import get_queries, get_index, get_number_of_documents_corpus, get_document_index
-import os
-import sys
-import resource
 import argparse
-import psutil
 import time
-import concurrent.futures
-import gc
 import heapq
-import ast
 from concurrent.futures import ThreadPoolExecutor
 
 import re
 
 import nltk
+
+# se estiver dando erro na maquina na hora de baixar, favor remover esses ifs de download
+if not nltk.corpus.stopwords.words('english'):
+    nltk.download('stopwords')
+
+if not nltk.sent_tokenize('Hello world.'):
+    nltk.download('punkt')
 
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
@@ -116,7 +116,7 @@ def main():
 
     document_index, avg_terms_document = get_document_index(args.index_path)
 
-    print('avg_terms_document', avg_terms_document, "len index: ", len(index))
+    # print('avg_terms_document', avg_terms_document, "len index: ", len(index))
     
     number_documents_corpus = get_number_of_documents_corpus(args.index_path)
 
@@ -126,7 +126,7 @@ def main():
     for query in queries:
         tokens = tokenize(query)
 
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=6) as executor:
             # DAAT - pecorre cada documento presente no document index
             results = list(executor.map(process_target, document_index.keys(), [tokens]*len(document_index), [index]*len(document_index), [number_documents_corpus]*len(document_index), [document_index]*len(document_index), [avg_terms_document]*len(document_index)))
 
@@ -141,7 +141,7 @@ def main():
 
     end_time_query = time.time()
 
-    print(f"Tempo para processar queries: {end_time_query - start_time_query}")
+    # print(f"Tempo para processar queries: {end_time_query - start_time_query}")
 
 
 if __name__ == "__main__":

@@ -1,9 +1,6 @@
 import time
 import ast
 import re
-import sys
-from nltk.tokenize import word_tokenize
-from nltk.stem import PorterStemmer
 
 def get_queries(path):
     with open(path, 'r') as f:
@@ -64,11 +61,9 @@ def get_index(path):
                         data_index[processed_word] = documents
                 else:
                     data_index[processed_word] = documents
-                if processed_word == 'appl':
-                    print(len(documents), len(data_index[processed_word]), processed_word in data_index)
         end = time.time()
 
-        print("Tempo para ler index: ", end - start, 'linhas com erro: ', lines_with_error, len(data_index))
+        # print("Tempo para ler index: ", end - start, 'linhas com erro: ', lines_with_error, len(data_index))
 
         with open(path + 'new_index.txt', 'w') as file:
             for key, value in data_index.items():
